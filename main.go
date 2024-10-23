@@ -37,6 +37,9 @@ func main() {
 	mux.HandleFunc("/api/task", func(w http.ResponseWriter, r *http.Request) {
 		handlers.TaskHandler(w, r, db)
 	})
+	mux.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
+		handlers.TaskHandler(w, r, db)
+	})
 
 	err = http.ListenAndServe(":7540", mux)
 	if err != nil {

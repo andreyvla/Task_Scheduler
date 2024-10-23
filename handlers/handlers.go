@@ -120,3 +120,37 @@ func isValidRepeatFormat(repeat string) bool {
 	}
 	return false
 }
+
+func GetTasks(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	rows, err := db.Query("SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date ASC LIMIT 50")
+	if err != nil {
+		http.Error(w, `{"error": "Ошибка выполнения запроса"}`, http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var tasks []models.Task
+	var date time.Time
+	for rows.Next() {
+		var task models.Task
+		if err := rows.Scan(&task.ID, &date, &task.Title, &task.Comment, &task.Repeat); err != nil {
+			http.Error(w, `{"error": "Ошибка чтения данных"}`, http.StatusInternalServerError)
+			return
+		}
+		task.Date = date.Format("20060102")
+		tasks = append(tasks, task)
+	}
+
+	if tasks == nil {
+		tasks = []models.Task{}
+	}
+
+	response := models.Response{Tasks: tasks}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
