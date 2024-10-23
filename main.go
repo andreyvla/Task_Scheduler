@@ -38,7 +38,11 @@ func main() {
 		handlers.TaskHandler(w, r, db)
 	})
 	mux.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
-		handlers.TaskHandler(w, r, db)
+		if r.Method == http.MethodGet {
+			handlers.GetTasks(w, r, db)
+		} else {
+			http.Error(w, "Метод не разрешен", http.StatusMethodNotAllowed)
+		}
 	})
 
 	err = http.ListenAndServe(":7540", mux)

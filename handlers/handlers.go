@@ -3,9 +3,11 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"go_final_project/database"
 	"go_final_project/models"
 	"go_final_project/utils"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -122,6 +124,8 @@ func isValidRepeatFormat(repeat string) bool {
 }
 
 func GetTasks(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	log.Println("GetTasks вызван")
+
 	if r.Method != http.MethodGet {
 		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
 		return
@@ -134,23 +138,47 @@ func GetTasks(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 	defer rows.Close()
 
-	var tasks []models.Task
-	var date time.Time
+	var tasks []Task
+
 	for rows.Next() {
-		var task models.Task
-		if err := rows.Scan(&task.ID, &date, &task.Title, &task.Comment, &task.Repeat); err != nil {
+		var task Task
+		var id int
+		var date time.Time
+		if err := rows.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat); err != nil {
 			http.Error(w, `{"error": "Ошибка чтения данных"}`, http.StatusInternalServerError)
 			return
 		}
+		task.ID = fmt.Sprint(id)
 		task.Date = date.Format("20060102")
 		tasks = append(tasks, task)
 	}
 
 	if tasks == nil {
-		tasks = []models.Task{}
+		tasks = []Task{}
 	}
 
-	response := models.Response{Tasks: tasks}
+	// Проверка ошибок после завершения перебора
+	if err := rows.Err(); err != nil {
+		http.Error(w, `{"error": "Ошибка при переборе результатов"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Создание ответа
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	jsonResponse, err := json.Marshal(map[string]interface{}{"tasks": tasks})
+	if err != nil {
+		http.Error(w, `{"error": "Ошибка при переборе результатов"}`, http.StatusInternalServerError)
+		return
+	}
+	w.Write(jsonResponse)
+
+}
+
+type Task struct {
+	ID      string `json:"id"`
+	Date    string `json:"date"`
+	Title   string `json:"title"`
+	Comment string `json:"comment,omitempty"`
+	Repeat  string `json:"repeat,omitempty"`
 }
