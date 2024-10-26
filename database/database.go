@@ -62,3 +62,25 @@ VALUES (?, ?, ?, ?)
 
 	return int(taskID), nil
 }
+
+func GetTaskByID(db *sql.DB, id string) (*Task, error) {
+	var task Task
+	var dateString string
+	query := "SELECT id, date, title, comment, repeat FROM scheduler WHERE id = ?"
+	err := db.QueryRow(query, id).Scan(&task.ID, &dateString, &task.Title, &task.Comment, &task.Repeat)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("Задача не найдена")
+		}
+		log.Println("Ошибка при выполнении запроса:", err)
+		return nil, fmt.Errorf("Ошибка при получении задачи")
+	}
+
+	// Преобразуем строку даты в тип time.Time
+	task.Date, err = time.Parse("20060102", dateString)
+	if err != nil {
+		return nil, fmt.Errorf("Ошибка при преобразовании даты")
+	}
+
+	return &task, nil
+}

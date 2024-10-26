@@ -7,7 +7,3 @@ type Task struct {
 	Comment string `json:"comment,omitempty"`
 	Repeat  string `json:"repeat,omitempty"`
 }
-
-type Response struct {
-	Tasks []Task `json:"tasks"`
-}

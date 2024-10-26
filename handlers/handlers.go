@@ -3,11 +3,9 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"go_final_project/database"
 	"go_final_project/models"
 	"go_final_project/utils"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -47,11 +45,17 @@ func NextDateHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func TaskHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
-	if r.Method != http.MethodPost {
+	switch r.Method {
+	case http.MethodPost:
+		handlePostTask(w, r, db)
+	case http.MethodGet:
+		handleGetTask(w, r, db)
+	default:
 		http.Error(w, "Метод не разрешен", http.StatusMethodNotAllowed)
-		return
 	}
+}
 
+func handlePostTask(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	var task models.Task
 	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
 		http.Error(w, `{"error":"Ошибка десериализации JSON"}`, http.StatusBadRequest)
@@ -124,8 +128,6 @@ func isValidRepeatFormat(repeat string) bool {
 }
 
 func GetTasks(w http.ResponseWriter, r *http.Request, db *sql.DB) {
-	log.Println("GetTasks вызван")
-
 	if r.Method != http.MethodGet {
 		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
 		return
@@ -138,23 +140,23 @@ func GetTasks(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 	defer rows.Close()
 
-	var tasks []Task
+	var tasks []models.Task
 
 	for rows.Next() {
-		var task Task
-		var id int
+		var task models.Task
+
 		var date time.Time
 		if err := rows.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat); err != nil {
 			http.Error(w, `{"error": "Ошибка чтения данных"}`, http.StatusInternalServerError)
 			return
 		}
-		task.ID = fmt.Sprint(id)
+
 		task.Date = date.Format("20060102")
 		tasks = append(tasks, task)
 	}
 
 	if tasks == nil {
-		tasks = []Task{}
+		tasks = []models.Task{}
 	}
 
 	// Проверка ошибок после завершения перебора
@@ -175,10 +177,26 @@ func GetTasks(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 
 }
 
-type Task struct {
-	ID      string `json:"id"`
-	Date    string `json:"date"`
-	Title   string `json:"title"`
-	Comment string `json:"comment,omitempty"`
-	Repeat  string `json:"repeat,omitempty"`
+func handleGetTask(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, `{"error":"Не указан идентификатор"}`, http.StatusBadRequest)
+		return
+	}
+
+	task, err := database.GetTaskByID(db, id)
+	if err != nil {
+		http.Error(w, `{"error":"Задача не найдена"}`, http.StatusNotFound)
+		return
+	}
+
+	response := map[string]interface{}{
+		"id":      strconv.Itoa(task.ID),
+		"date":    task.Date.Format("20060102"),
+		"title":   task.Title,
+		"comment": task.Comment,
+		"repeat":  task.Repeat,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
