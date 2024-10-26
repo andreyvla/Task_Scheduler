@@ -84,3 +84,26 @@ func GetTaskByID(db *sql.DB, id string) (*Task, error) {
 
 	return &task, nil
 }
+
+func UpdateTask(db *sql.DB, id int, date time.Time, title, comment, repeat string) error {
+	query := `
+		UPDATE scheduler 
+		SET date = ?, title = ?, comment = ?, repeat = ? 
+		WHERE id = ?`
+
+	result, err := db.Exec(query, date.Format("20060102"), title, comment, repeat, id)
+	if err != nil {
+		return fmt.Errorf("ошибка при обновлении задачи: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("ошибка при получении количества обновленных строк: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("Задача не найдена")
+	}
+
+	return nil
+}

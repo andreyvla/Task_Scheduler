@@ -50,6 +50,8 @@ func TaskHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		handlePostTask(w, r, db)
 	case http.MethodGet:
 		handleGetTask(w, r, db)
+	case http.MethodPut:
+		handlePutTask(w, r, db)
 	default:
 		http.Error(w, "Метод не разрешен", http.StatusMethodNotAllowed)
 	}
@@ -199,4 +201,71 @@ func handleGetTask(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func handlePutTask(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	var task models.Task
+	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+		http.Error(w, `{"error":"Ошибка десериализации JSON"}`, http.StatusBadRequest)
+		return
+	}
+
+	if task.ID == "" {
+		http.Error(w, `{"error":"Не указан идентификатор задачи"}`, http.StatusBadRequest)
+		return
+	}
+	if task.Title == "" {
+		http.Error(w, `{"error":"Не указан заголовок задачи"}`, http.StatusBadRequest)
+		return
+	}
+	if !isValidRepeatFormat(task.Repeat) {
+		http.Error(w, `{"error":"Неверный формат правила повторения"}`, http.StatusBadRequest)
+		return
+	}
+
+	now := time.Now()
+	var taskDate time.Time
+	var err error
+
+	if task.Date == "" || task.Date == now.Format("20060102") {
+		taskDate = now
+	} else {
+		taskDate, err = time.Parse("20060102", task.Date)
+		if err != nil {
+			http.Error(w, `{"error":"Дата представлена в неверном формате"}`, http.StatusBadRequest)
+			return
+		}
+	}
+
+	if taskDate.Before(now) {
+		if task.Repeat == "" {
+			taskDate = now
+		} else {
+			nextDate, err := utils.NextDate(now, taskDate, task.Repeat)
+			if err != nil {
+				http.Error(w, `{"error":"Неверный формат правила повторения"}`, http.StatusBadRequest)
+				return
+			}
+			taskDate = nextDate
+		}
+	}
+	taskID, err := strconv.Atoi(task.ID)
+	if err != nil {
+		http.Error(w, `{"error":"Идентификатор задачи должен быть числом"}`, http.StatusBadRequest)
+		return
+	}
+	err = database.UpdateTask(db, taskID, taskDate, task.Title, task.Comment, task.Repeat)
+	if err != nil {
+		if err.Error() == "Задача не найдена" {
+			http.Error(w, `{"error":"Задача не найдена"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Возвращаем пустой JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("{}"))
 }
