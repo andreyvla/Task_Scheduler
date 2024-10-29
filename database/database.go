@@ -107,3 +107,14 @@ func UpdateTask(db *sql.DB, id int, date time.Time, title, comment, repeat strin
 
 	return nil
 }
+
+func UpdateTaskDate(db *sql.DB, taskID int, newDate time.Time) error {
+	query := `UPDATE scheduler SET date = ? WHERE id = ?`
+	_, err := db.Exec(query, newDate, taskID)
+	return err
+}
+func DeleteTask(db *sql.DB, taskID int) error {
+	query := `DELETE FROM scheduler WHERE id = ?`
+	_, err := db.Exec(query, taskID)
+	return err
+}

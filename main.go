@@ -44,7 +44,9 @@ func main() {
 			http.Error(w, "Метод не разрешен", http.StatusMethodNotAllowed)
 		}
 	})
-
+	mux.HandleFunc("/api/task/done", func(w http.ResponseWriter, r *http.Request) {
+		handlers.HandlePostTaskDone(w, r, db)
+	})
 	err = http.ListenAndServe(":7540", mux)
 	if err != nil {
 		panic(err)

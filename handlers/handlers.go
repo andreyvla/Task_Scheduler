@@ -52,6 +52,8 @@ func TaskHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		handleGetTask(w, r, db)
 	case http.MethodPut:
 		handlePutTask(w, r, db)
+	case http.MethodDelete:
+		handleDeleteTask(w, r, db)
 	default:
 		http.Error(w, "Метод не разрешен", http.StatusMethodNotAllowed)
 	}
@@ -260,6 +262,91 @@ func handlePutTask(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 			http.Error(w, `{"error":"Задача не найдена"}`, http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Возвращаем пустой JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("{}"))
+}
+
+func HandlePostTaskDone(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	idStr := r.URL.Query().Get("id")
+	if idStr == "" {
+		http.Error(w, `{"error":"Не указан идентификатор задачи"}`, http.StatusBadRequest)
+		return
+	}
+
+	taskID, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, `{"error":"Идентификатор задачи должен быть числом"}`, http.StatusBadRequest)
+		return
+	}
+
+	task, err := database.GetTaskByID(db, idStr)
+	if err != nil {
+		w.Write([]byte("{}"))
+		return
+	}
+
+	now := time.Now()
+	var nextDate time.Time
+
+	if task.Repeat != "" {
+		// Рассчитываем следующую дату выполнения
+		nextDate, err = utils.NextDate(now, task.Date, task.Repeat)
+		if err != nil {
+			http.Error(w, `{"error":"Ошибка при расчете следующей даты"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Обновляем дату задачи
+		err = database.UpdateTaskDate(db, taskID, nextDate)
+		if err != nil {
+			http.Error(w, `{"error":"Ошибка при обновлении даты задачи"}`, http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// Если задача одноразовая, удаляем ее
+		err = database.DeleteTask(db, taskID)
+		if err != nil {
+			http.Error(w, `{"error":"Ошибка при удалении задачи"}`, http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Возвращаем пустой JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("{}"))
+}
+
+func handleDeleteTask(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	idStr := r.URL.Query().Get("id")
+	if idStr == "" {
+		http.Error(w, `{"error":"Не указан идентификатор задачи"}`, http.StatusBadRequest)
+		return
+	}
+
+	taskID, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, `{"error":"Идентификатор задачи должен быть числом"}`, http.StatusBadRequest)
+		return
+	}
+
+	err = database.DeleteTask(db, taskID)
+	if err != nil {
+		if err.Error() == "Задача не найдена" {
+			http.Error(w, `{"error":"Задача не найдена"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"Ошибка при удалении задачи"}`, http.StatusInternalServerError)
 		}
 		return
 	}
