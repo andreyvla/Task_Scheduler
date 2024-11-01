@@ -30,6 +30,11 @@ func main() {
 	}
 	defer db.Close()
 
+	port := os.Getenv("TODO_PORT")
+	if port == "" {
+		port = "7540"
+	}
+
 	mux := http.NewServeMux()
 	webDir := "./web"
 	mux.Handle("/", http.FileServer(http.Dir(webDir)))
@@ -47,7 +52,7 @@ func main() {
 	mux.HandleFunc("/api/task/done", func(w http.ResponseWriter, r *http.Request) {
 		handlers.HandlePostTaskDone(w, r, db)
 	})
-	err = http.ListenAndServe(":7540", mux)
+	err = http.ListenAndServe(":"+port, mux)
 	if err != nil {
 		panic(err)
 	}
