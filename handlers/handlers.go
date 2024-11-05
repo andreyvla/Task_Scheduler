@@ -149,16 +149,11 @@ func GetTasks(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	for rows.Next() {
 		var task models.Task
 
-		var date time.Time
 		if err := rows.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat); err != nil {
 			http.Error(w, `{"error": "Ошибка чтения данных"}`, http.StatusInternalServerError)
 			return
 		}
 
-		task.Date = date.Format("20060102")
-		if task.Date == "00010101" {
-			task.Date = time.Now().Format("20060102")
-		}
 		tasks = append(tasks, task)
 	}
 
