@@ -156,6 +156,9 @@ func GetTasks(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		}
 
 		task.Date = date.Format("20060102")
+		if task.Date == "00010101" {
+			task.Date = time.Now().Format("20060102")
+		}
 		tasks = append(tasks, task)
 	}
 
