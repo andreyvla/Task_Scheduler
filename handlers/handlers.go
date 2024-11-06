@@ -44,18 +44,20 @@ func NextDateHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(response))
 }
 
-func TaskHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
-	switch r.Method {
-	case http.MethodPost:
-		handlePostTask(w, r, db)
-	case http.MethodGet:
-		handleGetTask(w, r, db)
-	case http.MethodPut:
-		handlePutTask(w, r, db)
-	case http.MethodDelete:
-		handleDeleteTask(w, r, db)
-	default:
-		http.Error(w, "Метод не разрешен", http.StatusMethodNotAllowed)
+func TaskHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			handlePostTask(w, r, db)
+		case http.MethodGet:
+			handleGetTask(w, r, db)
+		case http.MethodPut:
+			handlePutTask(w, r, db)
+		case http.MethodDelete:
+			handleDeleteTask(w, r, db)
+		default:
+			http.Error(w, "Метод не разрешен", http.StatusMethodNotAllowed)
+		}
 	}
 }
 
@@ -131,52 +133,54 @@ func isValidRepeatFormat(repeat string) bool {
 	return false
 }
 
-func GetTasks(w http.ResponseWriter, r *http.Request, db *sql.DB) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
-		return
-	}
-
-	rows, err := db.Query("SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date ASC LIMIT 50")
-	if err != nil {
-		http.Error(w, `{"error": "Ошибка выполнения запроса"}`, http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	var tasks []models.Task
-
-	for rows.Next() {
-		var task models.Task
-
-		if err := rows.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat); err != nil {
-			http.Error(w, `{"error": "Ошибка чтения данных"}`, http.StatusInternalServerError)
+func GetTasks(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
 			return
 		}
 
-		tasks = append(tasks, task)
+		rows, err := db.Query("SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date ASC LIMIT 50")
+		if err != nil {
+			http.Error(w, `{"error": "Ошибка выполнения запроса"}`, http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var tasks []models.Task
+
+		for rows.Next() {
+			var task models.Task
+
+			if err := rows.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat); err != nil {
+				http.Error(w, `{"error": "Ошибка чтения данных"}`, http.StatusInternalServerError)
+				return
+			}
+
+			tasks = append(tasks, task)
+		}
+
+		if tasks == nil {
+			tasks = []models.Task{}
+		}
+
+		// Проверка ошибок после завершения перебора
+		if err := rows.Err(); err != nil {
+			http.Error(w, `{"error": "Ошибка при переборе результатов"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Создание ответа
+
+		w.Header().Set("Content-Type", "application/json")
+		jsonResponse, err := json.Marshal(map[string]interface{}{"tasks": tasks})
+		if err != nil {
+			http.Error(w, `{"error": "Ошибка при переборе результатов"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Write(jsonResponse)
+
 	}
-
-	if tasks == nil {
-		tasks = []models.Task{}
-	}
-
-	// Проверка ошибок после завершения перебора
-	if err := rows.Err(); err != nil {
-		http.Error(w, `{"error": "Ошибка при переборе результатов"}`, http.StatusInternalServerError)
-		return
-	}
-
-	// Создание ответа
-
-	w.Header().Set("Content-Type", "application/json")
-	jsonResponse, err := json.Marshal(map[string]interface{}{"tasks": tasks})
-	if err != nil {
-		http.Error(w, `{"error": "Ошибка при переборе результатов"}`, http.StatusInternalServerError)
-		return
-	}
-	w.Write(jsonResponse)
-
 }
 
 func handleGetTask(w http.ResponseWriter, r *http.Request, db *sql.DB) {
@@ -270,60 +274,62 @@ func handlePutTask(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	w.Write([]byte("{}"))
 }
 
-func HandlePostTaskDone(w http.ResponseWriter, r *http.Request, db *sql.DB) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
-		return
-	}
+func HandlePostTaskDone(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+			return
+		}
 
-	idStr := r.URL.Query().Get("id")
-	if idStr == "" {
-		http.Error(w, `{"error":"Не указан идентификатор задачи"}`, http.StatusBadRequest)
-		return
-	}
+		idStr := r.URL.Query().Get("id")
+		if idStr == "" {
+			http.Error(w, `{"error":"Не указан идентификатор задачи"}`, http.StatusBadRequest)
+			return
+		}
 
-	taskID, err := strconv.Atoi(idStr)
-	if err != nil {
-		http.Error(w, `{"error":"Идентификатор задачи должен быть числом"}`, http.StatusBadRequest)
-		return
-	}
+		taskID, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, `{"error":"Идентификатор задачи должен быть числом"}`, http.StatusBadRequest)
+			return
+		}
 
-	task, err := database.GetTaskByID(db, idStr)
-	if err != nil {
+		task, err := database.GetTaskByID(db, idStr)
+		if err != nil {
+			w.Write([]byte("{}"))
+			return
+		}
+
+		now := time.Now()
+		var nextDate time.Time
+
+		if task.Repeat != "" {
+			// Рассчитываем следующую дату выполнения
+			nextDate, err = utils.NextDate(now, task.Date, task.Repeat)
+			if err != nil {
+				http.Error(w, `{"error":"Ошибка при расчете следующей даты"}`, http.StatusInternalServerError)
+				return
+			}
+
+			// Обновляем дату задачи
+			err = database.UpdateTaskDate(db, taskID, nextDate)
+			if err != nil {
+				http.Error(w, `{"error":"Ошибка при обновлении даты задачи"}`, http.StatusInternalServerError)
+				return
+			}
+		} else {
+			// Если задача одноразовая, удаляем ее
+			err = database.DeleteTask(db, taskID)
+			if err != nil {
+				http.Error(w, `{"error":"Ошибка при удалении задачи"}`, http.StatusInternalServerError)
+				return
+			}
+		}
+
+		// Возвращаем пустой JSON
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("{}"))
-		return
 	}
-
-	now := time.Now()
-	var nextDate time.Time
-
-	if task.Repeat != "" {
-		// Рассчитываем следующую дату выполнения
-		nextDate, err = utils.NextDate(now, task.Date, task.Repeat)
-		if err != nil {
-			http.Error(w, `{"error":"Ошибка при расчете следующей даты"}`, http.StatusInternalServerError)
-			return
-		}
-
-		// Обновляем дату задачи
-		err = database.UpdateTaskDate(db, taskID, nextDate)
-		if err != nil {
-			http.Error(w, `{"error":"Ошибка при обновлении даты задачи"}`, http.StatusInternalServerError)
-			return
-		}
-	} else {
-		// Если задача одноразовая, удаляем ее
-		err = database.DeleteTask(db, taskID)
-		if err != nil {
-			http.Error(w, `{"error":"Ошибка при удалении задачи"}`, http.StatusInternalServerError)
-			return
-		}
-	}
-
-	// Возвращаем пустой JSON
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("{}"))
 }
 
 func handleDeleteTask(w http.ResponseWriter, r *http.Request, db *sql.DB) {

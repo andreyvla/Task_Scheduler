@@ -2,18 +2,48 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func CreateDB(dbFile string) {
+func CreateOrGetDb() (*sql.DB, error) {
+	dbFile := os.Getenv("TODO_DBFILE")
+	if dbFile == "" {
+		dbFile = "scheduler.db"
+	}
+
+	// Проверяем, существует ли файл базы данных
+	_, err := os.Stat(dbFile)
+	if os.IsNotExist(err) {
+		log.Println("Файл базы данных не существует. Создание нового файла базы данных.")
+		if err := createDB(dbFile); err != nil {
+			return nil, err
+		}
+	} else if err != nil {
+		log.Printf("Ошибка при проверке файла базы данных: %v", err)
+		return nil, err
+	} else {
+		log.Println("База данных существует.")
+	}
+
+	// Открываем базу данных
 	db, err := sql.Open("sqlite3", dbFile)
 	if err != nil {
-		log.Println(err)
-		return
+		return nil, err
+	}
+
+	return db, nil
+}
+
+func createDB(dbFile string) error {
+	db, err := sql.Open("sqlite3", dbFile)
+	if err != nil {
+		return err
 	}
 	defer db.Close()
 	_, err = db.Exec(`
@@ -28,8 +58,9 @@ func CreateDB(dbFile string) {
 	`)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
+	return nil
 }
 
 type Task struct {
@@ -69,7 +100,7 @@ func GetTaskByID(db *sql.DB, id string) (*Task, error) {
 	query := "SELECT id, date, title, comment, repeat FROM scheduler WHERE id = ?"
 	err := db.QueryRow(query, id).Scan(&task.ID, &dateString, &task.Title, &task.Comment, &task.Repeat)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("Задача не найдена")
 		}
 		log.Println("Ошибка при выполнении запроса:", err)
